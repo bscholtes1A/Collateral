@@ -1,0 +1,82 @@
+@startuml
+
+ skinParam NoteBackgroundColor WhiteSmoke
+ skinParam NoteFontColor Black
+ skinParam ParticipantBackgroundColor WhiteSmoke
+ skinParam ActorBackgroundColor WhiteSmoke
+ skinParam AgentBackgroundColor White
+ skinParam AgentBorderColor SkyBlue
+ skinparam shadowing false
+ skinparam BoxPadding 10
+
+ !define ParticipantAColor f8f2ff
+ !define ParticipantBColor d9edff
+ !define VCIssuersColor D5F5E3
+ !define DataspaceAuthorityColor FCF3CF
+ !define WarningColor Business
+ !define LeadColor Technology
+
+ autonumber
+
+ box "VC Issuers" #VCIssuersColor
+     participant VcIssuersDidServer as "DID server"
+ end box
+
+ box "Participant A ecosystem" #ParticipantAColor
+     participant ParticipantADidServer as "DID Server" #Business
+     participant ParticipantAIdentityHub as "Identity Hub" #Business
+     participant ParticipantACatalog as "Federated Catalog" #Business
+     participant ParticipantAControlPlane as "Control Plane" #Business
+     participant ParticipantADataPlane as "Data Plane" #Business
+ end box
+
+ box "Participant B ecosystem" #ParticipantBColor
+     participant ParticipantBDataPlane as "Data Plane" #Business
+     participant ParticipantBControlPlane as "Control Plane" #Business
+     participant ParticipantBCatalog as "Federated Catalog" #Business
+     participant ParticipantBIdentityHub as "Identity Hub" #Business
+     participant ParticipantBDidServer as "DID Server" #Business
+ end box
+
+ box "Authority" #DataspaceAuthorityColor
+     participant RegistrationService as "Registration Service" #Business
+ end box
+
+ autonumber 1
+ == Query dataspace participants list ==
+
+ ParticipantACatalog ->> RegistrationService : request list of dataspace participants
+ activate RegistrationService
+ activate ParticipantACatalog
+ group Verify VCs
+     RegistrationService ->> ParticipantAIdentityHub : fetch Verifiable Credentials
+     activate ParticipantAIdentityHub
+     ParticipantAIdentityHub -->> RegistrationService : return list of VCs
+     RegistrationService ->> RegistrationService : resolve issuers\nDID documents
+     RegistrationService ->> VcIssuersDidServer : query DID documents
+     activate VcIssuersDidServer
+     VcIssuersDidServer -->> RegistrationService : DID document containing VC verification methods
+     RegistrationService ->> RegistrationService : verify VCs and\nenforce policies
+ end
+ RegistrationService -->> ParticipantACatalog : return DID documents of dataspace participants
+ deactivate RegistrationService
+
+ == Collect datasets from dataspace participants ==
+
+ ParticipantACatalog ->> ParticipantBDidServer : query DID document
+ activate ParticipantBDidServer
+ ParticipantBDidServer -->> ParticipantACatalog : return DID Document containing Control Plane `protocol` endpoint
+ deactivate ParticipantBDidServer
+ ParticipantACatalog ->> ParticipantBControlPlane : query datasets
+ activate ParticipantBControlPlane
+ group Verify VCs
+     ParticipantBControlPlane ->> ParticipantAIdentityHub : fetch Verifiable Credentials
+     ParticipantAIdentityHub -->> ParticipantBControlPlane : return list of VCs
+     ParticipantBControlPlane ->> ParticipantBControlPlane : resolve issuers\nDID documents
+     ParticipantBControlPlane ->> VcIssuersDidServer : query DID documents
+     VcIssuersDidServer -->> ParticipantBControlPlane : DID document containing VC verification methods
+     ParticipantBControlPlane ->> ParticipantBControlPlane : verify VCs and\nenforce policies
+ end
+ ParticipantBControlPlane -->> ParticipantACatalog : return datasets for which policy is satisfied
+
+ @enduml

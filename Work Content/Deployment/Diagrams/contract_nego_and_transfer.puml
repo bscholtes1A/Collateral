@@ -1,0 +1,111 @@
+@startuml
+
+skinParam NoteBackgroundColor WhiteSmoke
+skinParam NoteFontColor Black
+skinParam ParticipantBackgroundColor WhiteSmoke
+skinParam ActorBackgroundColor WhiteSmoke
+skinParam AgentBackgroundColor White
+skinParam AgentBorderColor SkyBlue
+skinparam shadowing false
+skinparam BoxPadding 10
+
+!define ParticipantAColor f8f2ff
+!define ParticipantBColor d9edff
+!define VCIssuersColor D5F5E3
+!define DataspaceAuthorityColor FCF3CF
+!define WarningColor Business
+!define LeadColor Technology
+
+autonumber
+
+box "VC Issuers" #VCIssuersColor
+    participant VcIssuersDidServer as "DID server"
+end box
+
+box "Participant A apps" #ParticipantAColor
+    participant ParticipantAApps as "Backend apps"
+end box
+
+box "Participant A ecosystem" #ParticipantAColor
+    participant ParticipantADidServer as "DID Server" #Business
+    participant ParticipantAIdentityHub as "Identity Hub" #Business
+    participant ParticipantACatalog as "Federated Catalog" #Business
+    participant ParticipantAControlPlane as "Control Plane" #Business
+    database ParticipantADatabase as "Database" #Business
+    participant ParticipantADataPlane as "Data Plane" #Business
+end box
+
+box "Participant B ecosystem" #ParticipantBColor
+    participant ParticipantBDataPlane as "Data Plane" #Business
+    participant ParticipantBControlPlane as "Control Plane" #Business
+    participant ParticipantBCatalog as "Federated Catalog" #Business
+    participant ParticipantBIdentityHub as "Identity Hub" #Business
+    participant ParticipantBDidServer as "DID Server" #Business
+end box
+
+box "Participant B apps" #ParticipantBColor
+    participant ParticipantBApps as "API"
+end box
+
+box "Authority" #DataspaceAuthorityColor
+    participant RegistrationService as "Registration Service" #Business
+end box
+
+autonumber 1
+== Negotiate access to asset ==
+
+ParticipantAControlPlane ->> ParticipantBControlPlane : request access to dataset, i.e. propose offer
+activate ParticipantAControlPlane
+activate ParticipantBControlPlane
+group Verify VCs
+    ParticipantBControlPlane ->> ParticipantAIdentityHub : fetch Verifiable Credentials
+    activate ParticipantAIdentityHub
+    ParticipantAIdentityHub -->> ParticipantBControlPlane : return list of VCs
+    ParticipantBControlPlane ->> ParticipantBControlPlane : resolve issuers\nDID documents
+    ParticipantBControlPlane ->> VcIssuersDidServer : query DID documents
+    activate VcIssuersDidServer
+    VcIssuersDidServer -->> ParticipantBControlPlane : DID document containing VC verification methods
+    ParticipantBControlPlane ->> ParticipantBControlPlane : verify VCs and\nenforce policies
+end
+
+group Negotiation (optional)
+    ParticipantBControlPlane ->> ParticipantAControlPlane : send counter-offer
+    ParticipantAControlPlane --> ParticipantBControlPlane : access counter-offer of propose new one
+    ParticipantBControlPlane ->> ParticipantAControlPlane : ...
+end
+
+ParticipantBControlPlane ->> ParticipantBControlPlane : generate and\nstore contract
+ParticipantBControlPlane ->> ParticipantAControlPlane : send contract
+ParticipantAControlPlane ->> ParticipantAControlPlane : store contract
+
+group Obtain/renew access token (while contract is valid)
+    ParticipantAControlPlane ->> ParticipantBControlPlane : initiate transfer (using contract id)
+    ParticipantBControlPlane ->> ParticipantBControlPlane : verify VCs\n(steps 2 to 7)
+    ParticipantBControlPlane ->> ParticipantBControlPlane : generate access\ntoken containing \nencrypted data address
+    ParticipantBControlPlane ->> ParticipantAControlPlane : send EDR containing the access token
+    ParticipantAControlPlane ->> ParticipantADatabase : cache EDR
+    activate ParticipantADatabase
+end
+
+activate ParticipantADataPlane
+deactivate ParticipantAControlPlane
+
+== Access data ==
+
+ParticipantAApps ->> ParticipantADataPlane : query data
+activate ParticipantAApps
+ParticipantADataPlane ->> ParticipantADatabase : request\nEDR
+ParticipantADatabase -->> ParticipantADataPlane : EDR
+ParticipantADataPlane ->> ParticipantBDataPlane : query data\nwith access token
+activate ParticipantBDataPlane
+ParticipantBDataPlane ->> ParticipantBControlPlane : validate token
+ParticipantBControlPlane -->> ParticipantBDataPlane : source data\naddress
+ParticipantBDataPlane ->> ParticipantBApps : fetch data\nfrom source
+activate ParticipantBApps
+ParticipantBApps -->> ParticipantBDataPlane : data
+deactivate ParticipantBApps
+ParticipantBDataPlane -->> ParticipantADataPlane : data
+ParticipantADataPlane -->> ParticipantAApps : data
+
+
+@enduml
